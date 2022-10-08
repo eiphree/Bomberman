@@ -32,5 +32,6 @@
 #define MAX_EVENT_BY_PLAYER_SIZE 8
 #define NO_MOVE 255
 #define MAX_STRING_LEN 255
+#define NOT_A_PLAYER 100
 
 #endif /* MAGICAL_CONSTS_H */

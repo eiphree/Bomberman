@@ -54,7 +54,7 @@ game_state GAME_STATE;
 struct client
 {
     uint8_t connection_id;
-    uint8_t player_id; // 0 if not a player
+    uint8_t player_id = NOT_A_PLAYER;
     bool connected;
     socket_ptr socket;
     bool finished; // true if thread associated with connection finished so it can be forgotten
@@ -161,7 +161,7 @@ uint8_t first_free_connection_id()
 
 uint8_t get_new_player_id()         // inherits data lock
 {
-    uint8_t id = GAME_STATE.players.size() + 1;
+    uint8_t id = GAME_STATE.players.size();
     return id;
 }
 
@@ -378,7 +378,7 @@ void reset_params()             //inherits exclusive data_lock and server_lock
     SERVER_STATE.turns.clear();
     for (auto &conn : SERVER_STATE.clients_connections)
     {
-        conn.second.player_id = 0;
+        conn.second.player_id = NOT_A_PLAYER;
     }
     for (auto &ev : SERVER_STATE.players_events)
     {
@@ -416,7 +416,7 @@ void handle_join(socket_ptr socket, std::string name, uint8_t conn_id)
                 boost::shared_lock<Lock> slock(server_lock);
                 if (GAME_STATE.players.size() >= PARAMS.players_count ||
                 // return if already joined
-                    SERVER_STATE.clients_connections[conn_id].player_id) {
+                    SERVER_STATE.clients_connections[conn_id].player_id != NOT_A_PLAYER) {
                     return;
                 }
             }
@@ -427,7 +427,6 @@ void handle_join(socket_ptr socket, std::string name, uint8_t conn_id)
             GAME_STATE.players.insert({player_id, pl});
             GAME_STATE.scores.insert({player_id, 0});
         }
-
         mess_len = serialize_accepted_player_message(buff, pl);
         {
             boost::shared_lock<Lock> slock(server_lock);
@@ -491,7 +490,7 @@ void receive_client_messages(uint8_t conn_id)
         boost::shared_lock<Lock> slock(server_lock);
         socket = SERVER_STATE.clients_connections[conn_id].socket;
         player_id = SERVER_STATE.clients_connections[conn_id].player_id;
-        if (player_id) {
+        if (player_id != NOT_A_PLAYER) {
             boost::shared_lock<Lock> lock(data_lock);
             curr_pos = GAME_STATE.player_positions[player_id];
         }
@@ -503,7 +502,7 @@ void receive_client_messages(uint8_t conn_id)
     {
         {
             boost::shared_lock<Lock> slock(server_lock);
-            if (!SERVER_STATE.clients_connections[conn_id].player_id)
+            if (SERVER_STATE.clients_connections[conn_id].player_id == NOT_A_PLAYER)
             {
                 //client woke up after the game ended and is not a player anymore
                 break;
@@ -532,7 +531,7 @@ void receive_client_messages(uint8_t conn_id)
             {
                 boost::shared_lock<Lock> slock(server_lock);
                 // game finished when client was waiting for a message - it can possibly join again
-                if (SERVER_STATE.clients_connections[conn_id].player_id)
+                if (SERVER_STATE.clients_connections[conn_id].player_id != NOT_A_PLAYER)
                 {
                     continue;
                 }
@@ -603,7 +602,7 @@ void handle_non_player(uint8_t conn_id)
 {
     boost::system::error_code err;
     boost::array<char, 8> buf;
-    uint8_t player_id = 0;
+    uint8_t player_id = NOT_A_PLAYER;
     socket_ptr socket;
     bool connected;
     {
@@ -622,7 +621,7 @@ void handle_non_player(uint8_t conn_id)
         }
         if (!connected)
             break;
-        if (!player_id)
+        if (player_id == NOT_A_PLAYER)
             continue; // client didn't join the game - they remain a watcher
         // client joined and will take part in the game - leaving loop and function
         break;
@@ -857,7 +856,7 @@ void accept_connections()
                     boost::lock_guard<Lock> slock(server_lock);
                     if (SERVER_STATE.clients_connections.size() >= CLIENTS_LIMIT)
                         continue;
-                    SERVER_STATE.clients_connections.insert({conn_id, {conn_id, 0, true, sock_ptr, false}});
+                    SERVER_STATE.clients_connections.insert({conn_id, {conn_id, NOT_A_PLAYER, true, sock_ptr, false}});
                 }
 
                 unsigned char buff[BUFFER_LENGTH];
